@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_from_directory, send_file
 from flask_cors import CORS
 import sqlite3
 from datetime import datetime, date, timedelta
@@ -7,7 +7,7 @@ import hashlib
 import secrets
 from functools import wraps
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.')
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Configure CORS
@@ -18,6 +18,29 @@ CORS(app,
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 DATABASE = 'leaderboard.db'
+
+# ========== STATIC FILE SERVING ==========
+
+@app.route('/')
+def index():
+    """Serve the main index.html"""
+    return send_file('index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Serve static files (CSS, JS, etc.)"""
+    # Don't serve API routes as static files
+    if filename.startswith('api/'):
+        return "Not found", 404
+    
+    if os.path.exists(filename):
+        return send_from_directory('.', filename)
+    return "File not found", 404
+
+@app.route('/assets/<path:filename>')
+def serve_assets(filename):
+    """Serve assets folder"""
+    return send_from_directory('assets', filename)
 
 # ========== AUTHENTICATION ==========
 
@@ -428,19 +451,13 @@ def delete_member(member_id):
     conn = get_db()
     c = conn.cursor()
     
-    # Get member details
     member = c.execute('SELECT name FROM members WHERE id = ?', (member_id,)).fetchone()
     if not member:
         conn.close()
         return jsonify({'success': False, 'error': 'Member not found'}), 404
     
-    # Delete from weekly leaderboard
     c.execute('DELETE FROM weekly_leaderboard WHERE member_id = ?', (member_id,))
-    
-    # Delete from monthly leaderboard
     c.execute('DELETE FROM monthly_leaderboard WHERE member_id = ?', (member_id,))
-    
-    # Delete from members table
     c.execute('DELETE FROM members WHERE id = ?', (member_id,))
     
     conn.commit()
@@ -468,8 +485,6 @@ def delete_weekly_entry(member_id):
     
     log_action('DELETE_WEEKLY', f'Deleted weekly stats for member ID {member_id}')
     return jsonify({'success': True, 'message': 'Weekly leaderboard entry deleted'})
-
-
 
 @app.route('/api/admin/leaderboard/monthly/<int:member_id>', methods=['DELETE'])
 @require_auth
@@ -499,4 +514,10 @@ if __name__ == '__main__':
     print("\nDefault admin: admin / synapse2024")
     print("Change password after first login!")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    
+    # Use PORT environment variable for deployment
+    port = int(os.environ.get('PORT', 5001))
+    # Set debug=False for production
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)
