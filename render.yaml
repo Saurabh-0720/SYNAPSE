@@ -1,10 +1,19 @@
 
 services:
   - type: web
-    name: synapse-iiit-manipur
+    name: synapse-leaderboard
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+    # Persistent disk for SQLite database
+    disk:
+      name: synapse-data
+      mountPath: /opt/render/project/src
+      sizeGB: 1
